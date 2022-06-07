@@ -22,8 +22,20 @@ function verifyIfExistsAccountCPF(req, res, next) {
 
 }
 
+function getBalance(statement) {
+  const balance = statement.reduce((acc, operation) => {
+    if (operation.type === 'credit') {
+      return acc + operation.amount
+    }
+    else {
+      return acc - operation.amount
+    }
+  }, 0)
+  return balance
+}
 
-app.post('/account', verifyIfExistsAccountCPF, (req, res) => {
+
+app.post('/account', (req, res) => {
   const { cpf, name } = req.body
   const customerAlreadyExists = customers.some((custumer) => custumer.cpf === cpf)
 
@@ -54,7 +66,7 @@ app.get('/statement', verifyIfExistsAccountCPF, (req, res) => {
 })
 
 app.post('/deposit', verifyIfExistsAccountCPF, (req, res) => {
-  const { description, amount } = request.body
+  const { description, amount } = req.body
 
   const { customer } = req
 
@@ -70,6 +82,78 @@ app.post('/deposit', verifyIfExistsAccountCPF, (req, res) => {
     .send()
 })
 
+app.post('/withdraw', verifyIfExistsAccountCPF, (req, res) => {
+  const { amount, description } = req.body
+  const { customer } = req
+  const balance = getBalance(customer.statement)
+
+  if (balance < amount) {
+    return res
+      .status(400)
+      .json({ error: "There's no money to do the operation" })
+  }
+  const statementOperation = {
+    description,
+    amount,
+    created_at: new Date(),
+    type: 'debit'
+  }
+  customer.statement.push(statementOperation)
+  return res
+    .status(201)
+    .send()
+})
+
+app.get('/statement/:date', verifyIfExistsAccountCPF, (req, res) => {
+  const { customer } = req
+  const { date } = req.query
+
+  const dateFormat = new Date(date + "T00:00")
+
+  const statement = customer.statement.filter((statement) => statement.created_at.toDateString() === new Date(dateFormat).toDateString())
+
+
+  return res
+    .status(200)
+    .json(statement)
+})
+
+app.put('/account', verifyIfExistsAccountCPF, (req, res) => {
+  const { name } = req.body
+  const { customer } = req
+
+  customer.name = name
+
+  return res
+    .status(200)
+    .send()
+})
+
+app.get('/account', verifyIfExistsAccountCPF, (req, res) => {
+  const { customer } = req
+
+  return res
+    .status(200)
+    .json(customer)
+})
+
+app.delete('/account', verifyIfExistsAccountCPF, (req, res) => {
+  const { customer } = req
+
+  customers.splice(customer + 1, 1)
+
+  return res
+    .status(200)
+    .json(customers)
+})
+
+app.get('/balance', verifyIfExistsAccountCPF, (req, res) => {
+  const { customer } = req
+  const balance = getBalance(customer.statement)
+  return res
+    .status(200)
+    .json(balance)
+})
 
 app.listen(port, () => {
   console.log(`Listening app on port ${port}`)
